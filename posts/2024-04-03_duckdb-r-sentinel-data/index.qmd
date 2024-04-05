@@ -1,0 +1,439 @@
+---
+title: "Manipulating Sentinel Data with DuckDB"
+description: | 
+        Documenting the manipulation of large datasets using DuckDB
+author: "D. Scarnecchia"
+date: 03-31-2024
+categories: [duckdb, SAS, Sentinel]
+engine: knitr
+---
+
+At work, we primarily work in SAS. This due to SAS as being a validated language and because of the large size of the data we work with. That said, this is 2024---SAS licenses are extremely expensive and the language is not nearly as flexible as open source offerings.
+
+I generally prefer working in R, but one of the biggest challanges I've faced in using R at work is the fact that while SAS is able to handle data sets that are larger than memory by using a combination of fast disk I/O and memory management, R---like Python, natively prefers to manipulate datasets in memory. This is challenging when the datasets can be 100s of gigabytes in in question.
+
+I've recently heard a lot of good things about [DuckDB](https://duckdb.org) and been reading through [\@hrbrmstr's](https://bsky.app/profile/hrbrmstr.dev) [Cooking with DuckDB](https://duckdb.hrbrmstr.app/). DuckDB is a relational database system designed for Online analytical processing (OLAP) workloads. It can be compiled with no external dependencies---incredibly useful for embedded applications---and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the [Sentinel Common Data Model](https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model) (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages (and yes, I am aware of arrow and pola.rs. I will eventually benchmark these versus duckDB.)
+
+::: {.callout-note appearance="minimal"}
+All SAS queries were run on a Dell PowerEdge R750 Rack Server dedicated to running SAS 9.4M5 with an Intel Xeon 6134 Gold processor and 8 CPUs with 8 cores apiece running at 3.20 Ghz and sporting 1.5 TB of RAM. All R and DuckDB queries were run a MacBook Pro with the following stats:
+
+```{bash}
+#| lst-label: lst-mac-stats
+#| lst-cap: "Results of calls to system_profiler on Mac OS"
+#| echo: false
+echo $(system_profiler SPHardwareDataType | grep "  Memory:")
+echo $(system_profiler SPHardwareDataType | grep Chip:)
+echo $(system_profiler SPHardwareDataType | grep Cores:)
+echo $(system_profiler SPHardwareDataType | grep Processors:)
+```
+:::
+
+## Getting Started
+
+While it's not nearly as large as the data our Data Partners hold or our internal test data, the [CMS 2008-2010 Data Entrepreneurs’ Synthetic Public Use Files (SynPUFs)](https://www.sentinelinitiative.org/methods-data-tools/software-packages-toolkits/medicare-claims-synthetic-public-use-files-sentinel-0) are publically available synthetic data in the Sentinel Common Data Model (SCDM) format, able to be used publicly, and still of a decent size. The SynPUFs are 5% synthetic samples of Medicare claims data from 2008 to 2010 and consist of 20, mutually exclusive datasets in the SAS7BDAT format.
+
+The first challenge is that these datasets are large---e.g., the diagnosis table consists of twenty 810 MB .SAS7BDAT format files. As SAS7BDAT is a propriety format and I don't have a SAS license on my home machine, I needed to convert these files to a format that DuckDB could read. The haven library offers `read_sas()`, but it requires holding the data in memory, and with 16 Gb of RAM on my MBP, binding the the subsamples for the largest datasets together and writing to parquet was a non-starter.
+
+Fortunately, thanks to R's purrr(), I was able to devise an inelegant solution[^1]. I didn't bother benchmarking this step, but it took roughly an hour on the MBP to chew through all of the datasets, appending each partition to a DuckDB table one-by-one, and then writing to parquet. @lst-sas-parquet shows the code used for this.
+
+[^1]: A better solution would have been to use SAS to convert the SynPUF data from the SAS7BDAT format to JSON or CSV, however, I don't have a SAS license for my personal machine, my work laptop doesn't have the hard drive space left to hold it, and it VPN and bandwidth constraints would have made it challenging to remove from my work environment.
+
+```{r}
+#| lst-label: lst-sas-parquet
+#| lst-cap: "R code for extracting SAS datasets and converting to parquet"
+#| eval: false
+#| echo: true
+#| code-fold: true
+#| tidy: true
+
+tables <-
+  c("death",
+    "demographic",
+    "diagnosis",
+    "dispensing",
+    "encounter",
+    "enrollment",
+    "procedure",
+    "facility",
+    "provider")
+
+con <- DBI::dbConnect(duckdb::duckdb(dbdir = "~/dev/SynPUFsDuckDB/data/duckdb.duckdb"))
+
+purrr::walk(tables, function(x) {
+
+  data <- haven::read_sas(paste0("data/", x, "_1", ".sas7bdat"))
+
+  DBI::dbExecute(con, "drop table if exists data")
+  duckdb::dbWriteTable(con, "data", data)
+  
+  num <- 2:20
+
+  purrr::walk(num, function(y) {
+    data <- haven::read_sas(paste0("data/", x, "_", y, ".sas7bdat"))
+    duckdb::dbAppendTable(con, "data", data)
+  })
+
+  DBI::dbExecute(
+    con,
+    sprintf(
+      'copy data to \'~/dev/SynPUFsDuckDB/data/%s-snappy.parquet\' (format \'parquet\');', x))
+})
+
+DBI::dbExecute(con, "drop table if exists data")
+DBI::dbDisconnect(con, shutdown = TRUE)
+```
+
+Now that we have that data in a more usable format. Let's look at what we have. I'll start by summarizing the tables. DuckDB's summarize feature is useful, but overkill here, so we're going simply going to describe the tables.
+
+```{bash}
+#| echo: false
+#| include: false
+/opt/homebrew/bin/duckdb duckdb.duckdb -c "SET temp_directory = 'temp_dir.tmp'";
+```
+
+::: panel-tabset
+## ENR
+
+```{bash}
+#| tbl-label: tbl-describe-enr
+#| tbl-caption: "Description of the Enrollment Table"
+#| output: asis
+/opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+  DESCRIBE SELECT *
+  FROM '~/dev/SynPUFsDuckDB/data/enrollment-snappy.parquet';"
+```
+
+## DEM
+
+```{bash}
+#| tbl-label: tbl-describe-dem
+#| tbl-caption: "Description of the Demographic Table"
+#| output: asis
+/opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+  DESCRIBE SELECT *
+  FROM '~/dev/SynPUFsDuckDB/data/demographic-snappy.parquet';"
+```
+
+## DIS
+
+```{bash}
+#| tbl-label: tbl-describe-dis
+#| tbl-caption: "Description of the Dispensing Table"
+#| output: asis
+/opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+  DESCRIBE SELECT *
+  FROM '~/dev/SynPUFsDuckDB/data/dispensing-snappy.parquet';"
+```
+
+## ENC
+
+```{bash}
+#| tbl-label: tbl-describe-enc
+#| tbl-caption: "Description of the Encounter Table"
+#| output: asis
+/opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+  DESCRIBE SELECT *
+  FROM '~/dev/SynPUFsDuckDB/data/encounter-snappy.parquet';"
+```
+
+## DIA
+
+```{bash}
+#| tbl-label: tbl-describe-dia
+#| tbl-caption: "Description of the Diagnosis Table"
+#| output: asis
+time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+  DESCRIBE SELECT *
+  FROM '~/dev/SynPUFsDuckDB/data/diagnosis-snappy.parquet';"
+```
+
+## PRO
+
+```{bash}
+#| tbl-label: tbl-describe-pro
+#| tbl-caption: "Description of the Procedure Table"
+#| output: asis
+time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+  DESCRIBE SELECT *
+  FROM '~/dev/SynPUFsDuckDB/data/procedure-snappy.parquet';"
+```
+
+## DTH
+
+```{bash}
+#| tbl-label: tbl-describe-dth
+#| tbl-caption: "Description of the Death Table"
+#| output: asis
+time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+  DESCRIBE SELECT *
+  FROM '~/dev/SynPUFsDuckDB/data/death-snappy.parquet';"
+```
+
+## FAC
+
+```{bash}
+#| tbl-label: tbl-describe-fac
+#| tbl-caption: "Description of the Facility Table"
+#| output: asis
+time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+  DESCRIBE SELECT *
+  FROM '~/dev/SynPUFsDuckDB/data/facility-snappy.parquet';"
+```
+
+## PVD
+
+```{bash}
+#| tbl-label: tbl-describe-pvd
+#| tbl-caption: "Description of the Provider Table"
+#| output: asis
+time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+  DESCRIBE SELECT *
+  FROM '~/dev/SynPUFsDuckDB/data/provider-snappy.parquet';"
+```
+:::
+
+
+As R doesn't natively have a 8-byte (64-bit) numeric type, it coerced any column that was an integer larger than 8-bytes to a double. I didn't want to take the chance of out of memory errors to work with these as a dataframe, so I used DuckDB to alter the type. `UBIGINT` is DuckDB's unsigned 8-byte integer type.
+
+Let's count grab the number of records in each parquet file:
+
+```{bash}
+#| tbl-label: tbl-dx-count
+#| tbl-caption: "Count of Records, Diagnosis Table"
+#| output: asis
+
+time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+  SELECT format('Enrollment') as Table
+       , count(*) as count
+  FROM '~/dev/SynPUFsDuckDB/data/enrollment-snappy.parquet'
+  UNION
+  SELECT format('Demographic') as Table
+       , count(*) as count
+  FROM '~/dev/SynPUFsDuckDB/data/demographic-snappy.parquet'
+  UNION
+  SELECT format('Dispensing') as Table
+       , count(*) as count
+  FROM '~/dev/SynPUFsDuckDB/data/dispensing-snappy.parquet'
+  UNION
+  SELECT format('Encounter') as Table
+       , count(*) as count
+  FROM '~/dev/SynPUFsDuckDB/data/encounter-snappy.parquet'
+  UNION
+  SELECT format('Diagnosis') as Table
+       , count(*) as count
+  FROM '~/dev/SynPUFsDuckDB/data/diagnosis-snappy.parquet'
+  UNION
+  SELECT format('Procedure') as Table
+       , count(*) as count
+  FROM '~/dev/SynPUFsDuckDB/data/procedure-snappy.parquet'
+  UNION
+  SELECT format('Death') as Table
+       , count(*) as count
+  FROM '~/dev/SynPUFsDuckDB/data/death-snappy.parquet'
+  UNION
+  SELECT format('Facility') as Table
+       , count(*) as count
+  FROM '~/dev/SynPUFsDuckDB/data/facility-snappy.parquet'
+  UNION
+  SELECT format('Provider') as Table
+       , count(*) as count
+  FROM '~/dev/SynPUFsDuckDB/data/provider-snappy.parquet'
+  ;"
+```
+
+## Querying the Data
+
+As I explored DuckDB, I ran a number of different SQL queries---some of which had practical purposes, others which were essentially cursed---as I attempted to put the tool through its passes. I was consistently impressed by the speed at which it returned answers. I decided to start with a relatively simple query of some practical use. @lst-dem-l3-agecat-catvars-sas illustrates SAS code which does the following:
+
+1.  Create a SAS format which bins ages into age cohorts
+2.  Calculates age as of the maximum date of the data---2010-12-31, stratifies by Sex, Ethnicity, and Race, and counts the number of records of a given age.
+3.  Applies the label and re-aggregates count.
+4.  Removes Sex, Ethnicity, and Race from the dataset, and re-aggregates the count.
+
+For reference, the demographic table is smaller than the diagnosis table with:
+
+::: {#lst-dem-l3-agecat-catvars-sas}
+```         
+libname synpufs "/path/obscured/SynPUFsDuckDB/data/";
+
+proc format;
+  value agecat_years
+  .       = "00. Missing"
+  low-<0  = "00. Negative"
+  0-<2    = "01. 0-1 yrs"
+  2-<5    = "02. 2-4 yrs"
+  5-<10   = "03. 5-9 yrs"
+  10-<15  = "04. 10-14 yrs"
+  15-<19  = "05. 15-18 yrs"
+  19-<22  = "06. 19-21 yrs"
+  22-<25  = "07. 22-24 yrs"
+  25-<35 = "08. 25-34 yrs"
+  35-<45 = "09. 35-44 yrs"
+  45-<55 = "10. 45-54 yrs"
+  55-<60 = "11. 55-59 yrs"
+  60-<65 = "12. 60-64 yrs"
+  65-<70 = "13. 65-69 yrs"
+  70-<75 = "14. 70-74 yrs"
+  75-high = "15. 75+ yrs"
+  ;
+run;
+
+proc sql noprint;
+create table _dem_l2_age as
+select floor((intck("month",birth_date,"31Dec2010"d)-(day("31Dec2010"d)<day(birth_date)))/12) as age_years label="Age (Years)"
+     ,  sex
+     ,  hispanic
+     ,  race
+     ,  count(*) as count format=comma16.
+from synpufs.demographic
+group by calculated age_years, sex, hispanic, race;
+quit;
+
+proc sql noprint;
+     create table dem_l2_agecat_catvars as
+     select put(age_years,agecat_years.) as agecat_years label="Age Category (Years)"
+     ,  sex
+     ,  hispanic
+     ,  race
+     ,  sum(count) as count format=comma16.
+     from _dem_l2_age
+     group by calculated agecat_years, sex, hispanic, race
+     order by calculated agecat_years;
+quit;
+
+proc sql noprint;
+     create table dem_l2_agecat as
+     select agecat_years
+     ,  sum(count) as count format=comma16.
+     from dem_l2_agecat_catvars
+     group by agecat_years;
+quit;
+```
+
+Calulate age cohorts and aggregate the demographic table by age cohort and demographic characteristics.
+:::
+
+I called this on the SAS Server via the CLI with time, and got the following results:
+
+```         
+real    0m5.178s
+user    0m1.871s
+sys     0m0.153s
+```
+
+Now let's run the same query via DuckDB in the command line---note the time below @lst-dem-l3-agecat-catvars.
+
+```{bash}
+#| lst-label: lst-dem-l3-agecat-catvars
+#| lst-cap: "Calulate age cohorts and aggregate the demographic table by age cohort and demographic characteristics."
+
+time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+CREATE OR REPLACE TEMP TABLE dem_l3_tmp AS
+SELECT (CAST(FLOOR(CAST(DATESUB('month', Birth_date, '2010-12-31') AS INTEGER) / 12) AS INTEGER)) as age
+      , sex
+      , hispanic
+      , race
+      , count(*) as count
+FROM '~/dev/SynPUFsDuckDB/data/demographic-snappy.parquet'
+GROUP BY age, sex, hispanic, race;
+
+CREATE OR REPLACE TEMP TABLE dem_l3_agecat_catvars AS
+SELECT CASE WHEN age IS NULL THEN '00. MISSING'
+            WHEN age < 0 THEN '00. NEGATIVE'
+            WHEN AGE BETWEEN 2 AND 4   THEN '02. 2-4 yrs'
+            WHEN AGE BETWEEN 5 AND 9  THEN '03. 5-9 yrs'
+            WHEN AGE BETWEEN 10 AND 14 THEN '04. 10-14 yrs'
+            WHEN AGE BETWEEN 15 AND 18 THEN '05. 15-18 yrs'
+            WHEN AGE BETWEEN 19 AND 21 THEN '06. 19-21 yrs'
+            WHEN AGE BETWEEN 22 AND 24 THEN '07. 22-24 yrs'
+            WHEN AGE BETWEEN 25 AND 34 THEN '08. 25-34 yrs'
+            WHEN AGE BETWEEN 35 AND 44 THEN '09. 35-44 yrs'
+            WHEN AGE BETWEEN 45 AND 54 THEN '10. 45-54 yrs'
+            WHEN AGE BETWEEN 55 AND 59 THEN '11. 55-59 yrs'
+            WHEN AGE BETWEEN 60 AND 64 THEN '12. 60-64 yrs'
+            WHEN AGE BETWEEN 65 AND 69 THEN '13. 65-69 yrs'
+            WHEN AGE BETWEEN 70 AND 74 THEN '14. 70-74 yrs'
+            ELSE '15. 75+' END as agecat_years
+     , sex
+     , hispanic
+     , race
+     , sum(count) as count
+FROM dem_l3_tmp
+GROUP BY agecat_years, sex, hispanic, race
+ORDER BY agecat_years;
+
+CREATE OR REPLACE TABLE dem_l3_agecat AS
+  SELECT
+    agecat_years,
+    SUM(count) AS count
+  FROM
+    dem_l3_agecat_catvars
+  GROUP BY
+    agecat_years
+  ORDER BY
+    agecat_years;
+"
+```
+
+As you can see, this results in a runtime that is two orders of magnitude faster than SAS.
+
+Now, for the sake of completeness, let's compare the results. We'll see that they're identical.
+
+::: panel-tabset
+## DuckDB
+
+```{bash}
+#| tbl-label: tbl-dem-l3-agecat-catvars-duckdb
+#| echo: false
+#| output: asis
+
+/opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+  SELECT * FROM dem_l3_agecat;"
+```
+
+## SAS
+
+```         
+Obs    agecat_years                count
+
+1     08. 25-34 yrs              24,747
+2     09. 35-44 yrs              49,660
+3     10. 45-54 yrs             100,906
+4     11. 55-59 yrs              70,964
+5     12. 60-64 yrs              80,540
+6     13. 65-69 yrs             342,196
+7     14. 70-74 yrs             460,971
+8     15. 75+ yrs             1,094,755
+```
+:::
+
+Let's try something a little more cursed. @lst-dx-per-enc-per-pat shows a query which attempts to calculate the number of diagnoses per Encounter per Patient. It's going to output 111706063 rows, so I'm not going to bother printing results, just the runtime.
+
+```{bash}
+#| echo: false
+#| include: false
+
+/opt/homebrew/bin/duckdb duckdb.duckdb -c "drop table if exists dem_l3_agecat;"
+```
+
+```{bash}
+#| lst-label: lst-dx-per-enc-per-pat
+#| lst-cap: "Runtime for a query that tries to join the diagnosis table to the encounter table by PatID and EncounterID and counts the number of diagnosis by PatID and EncounterID"
+#| echo: true
+
+time /opt/homebrew/bin/duckdb duckdb.duckdb -c "
+  CREATE OR REPLACE TEMP TABLE dia_l2_enc_patid AS
+  SELECT a.PatID
+       , a.EncounterID
+       , count(b.DX) as count 
+  FROM '~/dev/SynPUFsDuckDB/data/encounter-snappy.parquet' as a 
+  JOIN '~/dev/SynPUFsDuckDB/data/diagnosis-snappy.parquet' as b 
+  ON (a.PatID = b.PatID and a.EncounterID = b.EncounterID) 
+  GROUP BY a.EncounterID, a.PatID;"
+```
+
+Each time I run this query, it takes between 35 and 50 seconds. I gave up on SAS after about 45 minutes.
+
+## What about R?
+
+There are a number of methods for running a query and returning an R object. They deserve their own post, and so I'll write about these soon.
