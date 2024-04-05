@@ -108,7 +108,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   });
 </script><link rel="stylesheet" href="../../styles.css">
 </head>
-<body class="nav-fixed">
+<body class="nav-fixed fullcontent">
 
 <div id="quarto-search-results"></div>
   <header id="quarto-header" class="headroom fixed-top quarto-banner"><nav class="navbar navbar-expand-lg " data-bs-theme="dark"><div class="navbar-container container-fluid">
@@ -173,14 +173,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   </header><div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
-        
-    </div>
+    
 <!-- main -->
-<main class="content quarto-banner-title-block page-columns page-full" id="quarto-document-content"><p>At work, we primarily work in SAS. This due to SAS as being a validated language and because of the large size of the data we work with. That said, this is 2024—SAS licenses are extremely expensive and the language is not nearly as flexible as open source offerings.</p>
+<main class="content quarto-banner-title-block" id="quarto-document-content"><p>At work, we primarily work in SAS. This due to SAS as being a validated language and because of the large size of the data we work with. That said, this is 2024—SAS licenses are extremely expensive and the language is not nearly as flexible as open source offerings.</p>
 <p>I generally prefer working in R, but one of the biggest challanges I’ve faced in using R at work is the fact that while SAS is able to handle data sets that are larger than memory by using a combination of fast disk I/O and memory management, R—like Python, natively prefers to manipulate datasets in memory. This is challenging when the datasets can be 100s of gigabytes in in question.</p>
-<p>I’ve recently heard a lot of good things about <a href="https://duckdb.org">DuckDB</a> and been reading through <a href="https://bsky.app/profile/hrbrmstr.dev">@hrbrmstr’s</a> <a href="https://duckdb.hrbrmstr.app/">Cooking with DuckDB</a>. DuckDB is a relational database system designed for Online analytical processing (OLAP) workloads. It can be compiled with no external dependencies—incredibly useful for embedded applications—and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the <a href="https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model">Sentinel Common Data Model</a> (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages.</p>
-<div class="page-columns page-full"><p></p><div class="no-row-height column-margin column-container"><span class="margin-aside">I am aware of arrow and pola.rs. I will eventually benchmark these versus duckDB.</span></div></div>
+<p>I’ve recently heard a lot of good things about <a href="https://duckdb.org">DuckDB</a> and been reading through <a href="https://bsky.app/profile/hrbrmstr.dev">@hrbrmstr’s</a> <a href="https://duckdb.hrbrmstr.app/">Cooking with DuckDB</a>. DuckDB is a relational database system designed for Online analytical processing (OLAP) workloads. It can be compiled with no external dependencies—incredibly useful for embedded applications—and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the <a href="https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model">Sentinel Common Data Model</a> (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages<a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a>.</p>
 <div class="callout callout-style-simple callout-note no-icon">
 <div class="callout-body d-flex">
 <div class="callout-icon-container">
@@ -201,7 +198,7 @@ Total Number of Cores: 8 (4 performance and 4 efficiency)</code></pre>
 <section id="getting-started" class="level2"><h2 class="anchored" data-anchor-id="getting-started">Getting Started</h2>
 <p>While it’s not nearly as large as the data our Data Partners hold or our internal test data, the <a href="https://www.sentinelinitiative.org/methods-data-tools/software-packages-toolkits/medicare-claims-synthetic-public-use-files-sentinel-0">CMS 2008-2010 Data Entrepreneurs’ Synthetic Public Use Files (SynPUFs)</a> are publically available synthetic data in the Sentinel Common Data Model (SCDM) format, able to be used publicly, and still of a decent size. The SynPUFs are 5% synthetic samples of Medicare claims data from 2008 to 2010 and consist of 20, mutually exclusive datasets in the SAS7BDAT format.</p>
 <p>The first challenge is that these datasets are large—e.g., the diagnosis table consists of twenty 810 MB .SAS7BDAT format files. As SAS7BDAT is a propriety format and I don’t have a SAS license on my home machine, I needed to convert these files to a format that DuckDB could read. The haven library offers <code>read_sas()</code>, but it requires holding the data in memory, and with 16 Gb of RAM on my MBP, binding the the subsamples for the largest datasets together and writing to parquet was a non-starter.</p>
-<p>Fortunately, thanks to R’s purrr(), I was able to devise an inelegant solution<a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a>. I didn’t bother benchmarking this step, but it took roughly an hour on the MBP to chew through all of the datasets, appending each partition to a DuckDB table one-by-one, and then writing to parquet. <a href="#lst-sas-parquet" class="quarto-xref">Listing&nbsp;1</a> shows the code used for this.</p>
+<p>Fortunately, thanks to R’s purrr(), I was able to devise an inelegant solution<a href="#fn2" class="footnote-ref" id="fnref2" role="doc-noteref"><sup>2</sup></a>. I didn’t bother benchmarking this step, but it took roughly an hour on the MBP to chew through all of the datasets, appending each partition to a DuckDB table one-by-one, and then writing to parquet. <a href="#lst-sas-parquet" class="quarto-xref">Listing&nbsp;1</a> shows the code used for this.</p>
 <div class="cell">
 <div id="lst-sas-parquet" class="r cell-code listing quarto-float" data-code-fold="true">
 <figure class="quarto-float quarto-float-lst figure"><figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-sas-parquet-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -237,6 +234,19 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 </div>
 </div>
 <p>Now that we have that data in a more usable format. Let’s look at what we have. I’ll start by summarizing the tables. DuckDB’s summarize feature is useful, but overkill here, so we’re going simply going to describe the tables.</p>
+<div class="callout callout-style-simple callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Conventions
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Where it makes sense, I’m calling SAS and DuckDB via the command line, using <code>time</code>. This outputs Real, User, and Sys time below the code block or resulting table. For the purposes of most folks, Real time matters the most. For a brief explanation on what each means, please see this <a href="https://stackoverflow.com/a/556411" title="Real, User and Sys process time statistics">stackoverflow post</a>.</p>
+</div>
+</div>
 <div class="tabset-margin-container"></div><div class="panel-tabset">
 <ul class="nav nav-tabs" role="tablist">
 <li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-1-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-1" role="tab" aria-controls="tabset-1-1" aria-selected="true">ENR</a></li>
@@ -904,7 +914,7 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 </div>
 </div>
 </div>
-<p>On initial challenge: as R doesn’t natively have a 8-byte (64-bit) numeric type, it coerced any column that was an integer larger than 8-bytes to a double. I didn’t want to take the chance of out of memory errors to work with these as a dataframe, so I used DuckDB to alter the type. <code>UBIGINT</code> is DuckDB’s unsigned 8-byte integer type.</p>
+<p>When I initially ran this, I discovered a new challenge: As R doesn’t natively have a 8-byte (64-bit) numeric type, it coerced any column that was an integer larger than 8-bytes to a double. I didn’t want to take the chance of out of memory errors to work with these as a dataframe, so I used DuckDB to alter the type. <code>UBIGINT</code> is DuckDB’s unsigned 8-byte integer type.</p>
 <p>Let’s count grab the number of records in each parquet file and unioning them together:</p>
 <div class="cell" data-tbl-label="tbl-dx-count" data-tbl-caption="Count of Records, Diagnosis Table">
 <div class="sourceCode cell-code" id="cb11"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="bu">time</span> /opt/homebrew/bin/duckdb duckdb.duckdb <span class="at">-markdown</span> <span class="at">-c</span> <span class="st">"</span></span>
@@ -1126,8 +1136,7 @@ user    0m0.283s
 sys 0m0.012s</code></pre>
 </div>
 </div>
-<p>As you can see, this results in a runtime that is two orders of magnitude faster than SAS.</p>
-<p>Now, for the sake of completeness, let’s compare the results. We’ll see that they’re identical.</p>
+<p>As you can see, this results in a runtime that is a fraction of what SAS is delivering. For the sake of completeness, let’s compare the results.</p>
 <div class="tabset-margin-container"></div><div class="panel-tabset">
 <ul class="nav nav-tabs" role="tablist">
 <li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-2-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-2-1" role="tab" aria-controls="tabset-2-1" aria-selected="true">DuckDB</a></li>
@@ -1218,14 +1227,28 @@ sys 0m12.321s</code></pre>
 </div>
 </div>
 <p>Each time I run this query, it takes between 35 and 50 seconds. I gave up on SAS after about 45 minutes.</p>
-</section><section id="what-about-r" class="level2"><h2 class="anchored" data-anchor-id="what-about-r">What about R?</h2>
+<section id="what-about-r" class="level3"><h3 class="anchored" data-anchor-id="what-about-r">What about R?</h3>
 <p>There are a number of methods for running a query and returning an R object. They deserve their own post, and so I’ll write about these soon.</p>
+</section></section><section id="final-thoughts" class="level2"><h2 class="anchored" data-anchor-id="final-thoughts">Final Thoughts</h2>
+<p>DuckDB yields amazing performance even on machine without a ton of horsepower and it’s ability to quickly query larger than memory datasets will make it much easier to work with larger than memory datasets in languages like R and Python. The fact that it is designed for embedded applications with minimal external dependencies makes it a good candidate for deployment in distributed research networks, and it’s use of fairly standard SQL makes migrating to it incredibly easy.</p>
+<p><a href="https://bsky.app/profile/tft.io/post/3koz2b2lsph2o">DuckDB is magic</a>.</p>
 
 
 </section><div id="quarto-appendix" class="default"><section id="footnotes" class="footnotes footnotes-end-of-document" role="doc-endnotes"><h2 class="anchored quarto-appendix-heading">Footnotes</h2>
 <ol>
-<li id="fn1"><p>A better solution would have been to use SAS to convert the SynPUF data from the SAS7BDAT format to JSON or CSV, however, I don’t have a SAS license for my personal machine, my work laptop doesn’t have the hard drive space left to hold it, and it VPN and bandwidth constraints would have made it challenging to remove from my work environment.<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
-</ol></section></div></main><!-- /main --><script id="quarto-html-after-body" type="application/javascript">
+<li id="fn1"><p>I am aware of arrow and pola.rs and I will eventually benchmark these versus DuckDB.<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>A better solution would have been to use SAS to convert the SynPUF data from the SAS7BDAT format to JSON or CSV, however, I don’t have a SAS license for my personal machine, my work laptop doesn’t have the hard drive space left to hold it, and it VPN and bandwidth constraints would have made it challenging to remove from my work environment.<a href="#fnref2" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+</ol></section><section class="quarto-appendix-contents" id="quarto-citation"><h2 class="anchored quarto-appendix-heading">Citation</h2><div><div class="quarto-appendix-secondary-label">BibTeX citation:</div><pre class="sourceCode code-with-copy quarto-appendix-bibtex"><code class="sourceCode bibtex">@online{scarnecchia2024,
+  author = {Scarnecchia, D.},
+  title = {Manipulating {Sentinel} {Data} with {DuckDB}},
+  date = {2024-03-31},
+  url = {https://musings.mountainherder.xyz/posts/2024-04-03_duckdb-r-sentinel-data},
+  langid = {en}
+}
+</code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre><div class="quarto-appendix-secondary-label">For attribution, please cite this work as:</div><div id="ref-scarnecchia2024" class="csl-entry quarto-appendix-citeas" role="listitem">
+Scarnecchia, D. 2024. <span>“Manipulating Sentinel Data with
+DuckDB.”</span> March 31, 2024. <a href="https://musings.mountainherder.xyz/posts/2024-04-03_duckdb-r-sentinel-data">https://musings.mountainherder.xyz/posts/2024-04-03_duckdb-r-sentinel-data</a>.
+</div></div></section></div></main><!-- /main --><script id="quarto-html-after-body" type="application/javascript">
 window.document.addEventListener("DOMContentLoaded", function (event) {
   const toggleBodyColorMode = (bsSheetEl) => {
     const mode = bsSheetEl.getAttribute("data-mode");

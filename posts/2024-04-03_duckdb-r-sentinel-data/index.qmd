@@ -6,15 +6,16 @@ author: "D. Scarnecchia"
 date: 03-31-2024
 categories: [duckdb, SAS, Sentinel]
 engine: knitr
+citation: true
 ---
 
 At work, we primarily work in SAS. This due to SAS as being a validated language and because of the large size of the data we work with. That said, this is 2024---SAS licenses are extremely expensive and the language is not nearly as flexible as open source offerings.
 
 I generally prefer working in R, but one of the biggest challanges I've faced in using R at work is the fact that while SAS is able to handle data sets that are larger than memory by using a combination of fast disk I/O and memory management, R---like Python, natively prefers to manipulate datasets in memory. This is challenging when the datasets can be 100s of gigabytes in in question.
 
-I've recently heard a lot of good things about [DuckDB](https://duckdb.org) and been reading through [\@hrbrmstr's](https://bsky.app/profile/hrbrmstr.dev) [Cooking with DuckDB](https://duckdb.hrbrmstr.app/). DuckDB is a relational database system designed for Online analytical processing (OLAP) workloads. It can be compiled with no external dependencies---incredibly useful for embedded applications---and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the [Sentinel Common Data Model](https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model) (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages.
+I've recently heard a lot of good things about [DuckDB](https://duckdb.org) and been reading through [\@hrbrmstr's](https://bsky.app/profile/hrbrmstr.dev) [Cooking with DuckDB](https://duckdb.hrbrmstr.app/). DuckDB is a relational database system designed for Online analytical processing (OLAP) workloads. It can be compiled with no external dependencies---incredibly useful for embedded applications---and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the [Sentinel Common Data Model](https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model) (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages[^1].
 
-[I am aware of arrow and pola.rs. I will eventually benchmark these versus duckDB.]{.aside}
+[^1]: I am aware of arrow and pola.rs and I will eventually benchmark these versus DuckDB.
 
 ::: {.callout-note appearance="minimal"}
 All SAS queries were run on a Dell PowerEdge R750 Rack Server dedicated to running SAS 9.4M5 with an Intel Xeon 6134 Gold processor and 8 CPUs with 8 cores apiece running at 3.20 Ghz and sporting 1.5 TB of RAM. All R and DuckDB queries were run a MacBook Pro with the following stats:
@@ -37,9 +38,9 @@ While it's not nearly as large as the data our Data Partners hold or our interna
 
 The first challenge is that these datasets are large---e.g., the diagnosis table consists of twenty 810 MB .SAS7BDAT format files. As SAS7BDAT is a propriety format and I don't have a SAS license on my home machine, I needed to convert these files to a format that DuckDB could read. The haven library offers `read_sas()`, but it requires holding the data in memory, and with 16 Gb of RAM on my MBP, binding the the subsamples for the largest datasets together and writing to parquet was a non-starter.
 
-Fortunately, thanks to R's purrr(), I was able to devise an inelegant solution[^1]. I didn't bother benchmarking this step, but it took roughly an hour on the MBP to chew through all of the datasets, appending each partition to a DuckDB table one-by-one, and then writing to parquet. @lst-sas-parquet shows the code used for this.
+Fortunately, thanks to R's purrr(), I was able to devise an inelegant solution[^2]. I didn't bother benchmarking this step, but it took roughly an hour on the MBP to chew through all of the datasets, appending each partition to a DuckDB table one-by-one, and then writing to parquet. @lst-sas-parquet shows the code used for this.
 
-[^1]: A better solution would have been to use SAS to convert the SynPUF data from the SAS7BDAT format to JSON or CSV, however, I don't have a SAS license for my personal machine, my work laptop doesn't have the hard drive space left to hold it, and it VPN and bandwidth constraints would have made it challenging to remove from my work environment.
+[^2]: A better solution would have been to use SAS to convert the SynPUF data from the SAS7BDAT format to JSON or CSV, however, I don't have a SAS license for my personal machine, my work laptop doesn't have the hard drive space left to hold it, and it VPN and bandwidth constraints would have made it challenging to remove from my work environment.
 
 ```{r}
 #| lst-label: lst-sas-parquet
@@ -87,6 +88,12 @@ DBI::dbDisconnect(con, shutdown = TRUE)
 ```
 
 Now that we have that data in a more usable format. Let's look at what we have. I'll start by summarizing the tables. DuckDB's summarize feature is useful, but overkill here, so we're going simply going to describe the tables.
+
+::: {.callout-note appearance="minimal"}
+## Conventions
+
+Where it makes sense, I'm calling SAS and DuckDB via the command line, using `time`. This outputs Real, User, and Sys time below the code block or resulting table. For the purposes of most folks, Real time matters the most. For a brief explanation on what each means, please see this [stackoverflow post](https://stackoverflow.com/a/556411 "Real, User and Sys process time statistics").
+:::
 
 ```{bash}
 #| echo: false
@@ -204,7 +211,7 @@ time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
 ```
 :::
 
-On initial challenge: as R doesn't natively have a 8-byte (64-bit) numeric type, it coerced any column that was an integer larger than 8-bytes to a double. I didn't want to take the chance of out of memory errors to work with these as a dataframe, so I used DuckDB to alter the type. `UBIGINT` is DuckDB's unsigned 8-byte integer type.
+When I initially ran this, I discovered a new challenge: As R doesn't natively have a 8-byte (64-bit) numeric type, it coerced any column that was an integer larger than 8-bytes to a double. I didn't want to take the chance of out of memory errors to work with these as a dataframe, so I used DuckDB to alter the type. `UBIGINT` is DuckDB's unsigned 8-byte integer type.
 
 Let's count grab the number of records in each parquet file and unioning them together:
 
@@ -388,9 +395,7 @@ CREATE OR REPLACE TABLE dem_l3_agecat AS
 "
 ```
 
-As you can see, this results in a runtime that is two orders of magnitude faster than SAS.
-
-Now, for the sake of completeness, let's compare the results. We'll see that they're identical.
+As you can see, this results in a runtime that is a fraction of what SAS is delivering. For the sake of completeness, let's compare the results.
 
 ::: panel-tabset
 ## DuckDB
@@ -449,6 +454,12 @@ time /opt/homebrew/bin/duckdb duckdb.duckdb -c "
 
 Each time I run this query, it takes between 35 and 50 seconds. I gave up on SAS after about 45 minutes.
 
-## What about R?
+### What about R?
 
 There are a number of methods for running a query and returning an R object. They deserve their own post, and so I'll write about these soon.
+
+## Final Thoughts
+
+DuckDB yields amazing performance even on machine without a ton of horsepower and it's ability to quickly query larger than memory datasets will make it much easier to work with larger than memory datasets in languages like R and Python. The fact that it is designed for embedded applications with minimal external dependencies makes it a good candidate for deployment in distributed research networks, and it's use of fairly standard SQL makes migrating to it incredibly easy.
+
+[DuckDB is magic](https://bsky.app/profile/tft.io/post/3koz2b2lsph2o).
