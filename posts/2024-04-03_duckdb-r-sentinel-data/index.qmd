@@ -1,7 +1,7 @@
 ---
 title: "Manipulating Sentinel Data with DuckDB"
 description: | 
-        Documenting the manipulation of large datasets using DuckDB
+        Documenting and benchmarking DuckDB for manipulating large datasets in the Sentinel Common Data Model.
 author: "D. Scarnecchia"
 date: 03-31-2024
 categories: [duckdb, SAS, Sentinel]
@@ -12,7 +12,9 @@ At work, we primarily work in SAS. This due to SAS as being a validated language
 
 I generally prefer working in R, but one of the biggest challanges I've faced in using R at work is the fact that while SAS is able to handle data sets that are larger than memory by using a combination of fast disk I/O and memory management, R---like Python, natively prefers to manipulate datasets in memory. This is challenging when the datasets can be 100s of gigabytes in in question.
 
-I've recently heard a lot of good things about [DuckDB](https://duckdb.org) and been reading through [\@hrbrmstr's](https://bsky.app/profile/hrbrmstr.dev) [Cooking with DuckDB](https://duckdb.hrbrmstr.app/). DuckDB is a relational database system designed for Online analytical processing (OLAP) workloads. It can be compiled with no external dependencies---incredibly useful for embedded applications---and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the [Sentinel Common Data Model](https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model) (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages (and yes, I am aware of arrow and pola.rs. I will eventually benchmark these versus duckDB.)
+I've recently heard a lot of good things about [DuckDB](https://duckdb.org) and been reading through [\@hrbrmstr's](https://bsky.app/profile/hrbrmstr.dev) [Cooking with DuckDB](https://duckdb.hrbrmstr.app/). DuckDB is a relational database system designed for Online analytical processing (OLAP) workloads. It can be compiled with no external dependencies---incredibly useful for embedded applications---and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the [Sentinel Common Data Model](https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model) (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages.
+
+[I am aware of arrow and pola.rs. I will eventually benchmark these versus duckDB.]{.aside}
 
 ::: {.callout-note appearance="minimal"}
 All SAS queries were run on a Dell PowerEdge R750 Rack Server dedicated to running SAS 9.4M5 with an Intel Xeon 6134 Gold processor and 8 CPUs with 8 cores apiece running at 3.20 Ghz and sporting 1.5 TB of RAM. All R and DuckDB queries were run a MacBook Pro with the following stats:
@@ -100,7 +102,7 @@ Now that we have that data in a more usable format. Let's look at what we have. 
 #| tbl-caption: "Description of the Enrollment Table"
 #| output: asis
 #| cache: true
-/opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/enrollment-snappy.parquet';"
 ```
@@ -112,7 +114,7 @@ Now that we have that data in a more usable format. Let's look at what we have. 
 #| tbl-caption: "Description of the Demographic Table"
 #| output: asis
 #| cache: true
-/opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/demographic-snappy.parquet';"
 ```
@@ -124,7 +126,7 @@ Now that we have that data in a more usable format. Let's look at what we have. 
 #| tbl-caption: "Description of the Dispensing Table"
 #| output: asis
 #| cache: true
-/opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/dispensing-snappy.parquet';"
 ```
@@ -136,7 +138,7 @@ Now that we have that data in a more usable format. Let's look at what we have. 
 #| tbl-caption: "Description of the Encounter Table"
 #| output: asis
 #| cache: true
-/opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
+time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/encounter-snappy.parquet';"
 ```
@@ -202,10 +204,9 @@ time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
 ```
 :::
 
+On initial challenge: as R doesn't natively have a 8-byte (64-bit) numeric type, it coerced any column that was an integer larger than 8-bytes to a double. I didn't want to take the chance of out of memory errors to work with these as a dataframe, so I used DuckDB to alter the type. `UBIGINT` is DuckDB's unsigned 8-byte integer type.
 
-As R doesn't natively have a 8-byte (64-bit) numeric type, it coerced any column that was an integer larger than 8-bytes to a double. I didn't want to take the chance of out of memory errors to work with these as a dataframe, so I used DuckDB to alter the type. `UBIGINT` is DuckDB's unsigned 8-byte integer type.
-
-Let's count grab the number of records in each parquet file:
+Let's count grab the number of records in each parquet file and unioning them together:
 
 ```{bash}
 #| tbl-label: tbl-dx-count

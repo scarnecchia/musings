@@ -2,14 +2,22 @@ project:
   type: website
 
 website:
-  title: "musings-mountainherder-xyz"
+  title: "musings.mountainherder.xyz"
+  site-url: https://musings.mountainherder.xyz
+  repo-url: https://github.com/scarnecchia/musings
+  repo-subdir: _site
+  repo-actions: [issue, source]
+  issue-url: https://github.com/scarnecchia/musings/issues
+  comments: 
+    hypothesis:
+      theme: clean
+      openSidebar: false
   navbar:
     right:
-      - about.qmd
       - icon: github
-        href: https://github.com/
-      - icon: twitter
-        href: https://twitter.com
+        href: https://github.com/scarnecchia
+        aria-label: GitHub
+        
 format:
   html:
     theme: cosmo

@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <meta name="author" content="D. Scarnecchia">
 <meta name="dcterms.date" content="2024-03-31">
-<meta name="description" content="Documenting the manipulation of large datasets using DuckDB">
-<title>musings-mountainherder-xyz - Manipulating Sentinel Data with DuckDB</title>
+<meta name="description" content="Documenting and benchmarking DuckDB for manipulating large datasets in the Sentinel Common Data Model.">
+<title>musings.mountainherder.xyz - Manipulating Sentinel Data with DuckDB</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -97,15 +97,24 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     "search-submit-button-title": "Submit",
     "search-label": "Search"
   }
-}</script><link rel="stylesheet" href="../../styles.css">
+}</script><script type="application/json" class="js-hypothesis-config">
+{
+  "theme": "clean",
+  "openSidebar": false
+}
+</script><script async="" src="https://hypothes.is/embed.js"></script><script>
+  window.document.addEventListener("DOMContentLoaded", function (_event) {
+    document.body.classList.add('hypothesis-enabled');
+  });
+</script><link rel="stylesheet" href="../../styles.css">
 </head>
-<body class="nav-fixed fullcontent">
+<body class="nav-fixed">
 
 <div id="quarto-search-results"></div>
   <header id="quarto-header" class="headroom fixed-top quarto-banner"><nav class="navbar navbar-expand-lg " data-bs-theme="dark"><div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a class="navbar-brand" href="../../index.html">
-    <span class="navbar-title">musings-mountainherder-xyz</span>
+    <span class="navbar-title">musings.mountainherder.xyz</span>
     </a>
   </div>
             <div id="quarto-search" class="" title="Search"></div>
@@ -114,17 +123,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </button>
           <div class="collapse navbar-collapse" id="navbarCollapse">
             <ul class="navbar-nav navbar-nav-scroll ms-auto">
-<li class="nav-item">
-    <a class="nav-link" href="../../about.html"> 
-<span class="menu-text">About</span></a>
-  </li>  
-  <li class="nav-item compact">
-    <a class="nav-link" href="https://github.com/"> <i class="bi bi-github" role="img">
-</i> 
-<span class="menu-text"></span></a>
-  </li>  
-  <li class="nav-item compact">
-    <a class="nav-link" href="https://twitter.com"> <i class="bi bi-twitter" role="img">
+<li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/scarnecchia"> <i class="bi bi-github" role="img" aria-label="GitHub">
 </i> 
 <span class="menu-text"></span></a>
   </li>  
@@ -138,7 +138,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
       <h1 class="title">Manipulating Sentinel Data with DuckDB</h1>
                   <div>
         <div class="description">
-          <p>Documenting the manipulation of large datasets using DuckDB</p>
+          <p>Documenting and benchmarking DuckDB for manipulating large datasets in the Sentinel Common Data Model.</p>
         </div>
       </div>
                           <div class="quarto-categories">
@@ -173,11 +173,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   </header><div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
 <!-- margin-sidebar -->
-    
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        
+    </div>
 <!-- main -->
-<main class="content quarto-banner-title-block" id="quarto-document-content"><p>At work, we primarily work in SAS. This due to SAS as being a validated language and because of the large size of the data we work with. That said, this is 2024—SAS licenses are extremely expensive and the language is not nearly as flexible as open source offerings.</p>
+<main class="content quarto-banner-title-block page-columns page-full" id="quarto-document-content"><p>At work, we primarily work in SAS. This due to SAS as being a validated language and because of the large size of the data we work with. That said, this is 2024—SAS licenses are extremely expensive and the language is not nearly as flexible as open source offerings.</p>
 <p>I generally prefer working in R, but one of the biggest challanges I’ve faced in using R at work is the fact that while SAS is able to handle data sets that are larger than memory by using a combination of fast disk I/O and memory management, R—like Python, natively prefers to manipulate datasets in memory. This is challenging when the datasets can be 100s of gigabytes in in question.</p>
-<p>I’ve recently heard a lot of good things about <a href="https://duckdb.org">DuckDB</a> and been reading through <a href="https://bsky.app/profile/hrbrmstr.dev">@hrbrmstr’s</a> <a href="https://duckdb.hrbrmstr.app/">Cooking with DuckDB</a>. DuckDB is a relational database system designed for Online analytical processing (OLAP) workloads. It can be compiled with no external dependencies—incredibly useful for embedded applications—and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the <a href="https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model">Sentinel Common Data Model</a> (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages (and yes, I am aware of arrow and pola.rs. I will eventually benchmark these versus duckDB.)</p>
+<p>I’ve recently heard a lot of good things about <a href="https://duckdb.org">DuckDB</a> and been reading through <a href="https://bsky.app/profile/hrbrmstr.dev">@hrbrmstr’s</a> <a href="https://duckdb.hrbrmstr.app/">Cooking with DuckDB</a>. DuckDB is a relational database system designed for Online analytical processing (OLAP) workloads. It can be compiled with no external dependencies—incredibly useful for embedded applications—and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the <a href="https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model">Sentinel Common Data Model</a> (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages.</p>
+<div class="page-columns page-full"><p></p><div class="no-row-height column-margin column-container"><span class="margin-aside">I am aware of arrow and pola.rs. I will eventually benchmark these versus duckDB.</span></div></div>
 <div class="callout callout-style-simple callout-note no-icon">
 <div class="callout-body d-flex">
 <div class="callout-icon-container">
@@ -249,7 +252,7 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 <div class="tab-content">
 <div id="tabset-1-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-1-1-tab">
 <div class="cell" data-tbl-label="tbl-describe-enr" data-tbl-caption="Description of the Enrollment Table">
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">/opt/homebrew/bin/duckdb</span> duckdb.duckdb <span class="at">-markdown</span> <span class="at">-c</span> <span class="st">"</span></span>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">time</span> /opt/homebrew/bin/duckdb duckdb.duckdb <span class="at">-markdown</span> <span class="at">-c</span> <span class="st">"</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="st">  DESCRIBE SELECT *</span></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM '~/dev/SynPUFsDuckDB/data/enrollment-snappy.parquet';"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <table class="table table-sm table-striped small">
@@ -312,11 +315,12 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 </tr>
 </tbody>
 </table>
+<p>real 0m0.012s user 0m0.008s sys 0m0.002s</p>
 </div>
 </div>
 <div id="tabset-1-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-2-tab">
 <div class="cell" data-tbl-label="tbl-describe-dem" data-tbl-caption="Description of the Demographic Table">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">/opt/homebrew/bin/duckdb</span> duckdb.duckdb <span class="at">-markdown</span> <span class="at">-c</span> <span class="st">"</span></span>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">time</span> /opt/homebrew/bin/duckdb duckdb.duckdb <span class="at">-markdown</span> <span class="at">-c</span> <span class="st">"</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="st">  DESCRIBE SELECT *</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM '~/dev/SynPUFsDuckDB/data/demographic-snappy.parquet';"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <table class="table table-sm table-striped small">
@@ -387,11 +391,12 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 </tr>
 </tbody>
 </table>
+<p>real 0m0.011s user 0m0.007s sys 0m0.002s</p>
 </div>
 </div>
 <div id="tabset-1-3" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-3-tab">
 <div class="cell" data-tbl-label="tbl-describe-dis" data-tbl-caption="Description of the Dispensing Table">
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">/opt/homebrew/bin/duckdb</span> duckdb.duckdb <span class="at">-markdown</span> <span class="at">-c</span> <span class="st">"</span></span>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="bu">time</span> /opt/homebrew/bin/duckdb duckdb.duckdb <span class="at">-markdown</span> <span class="at">-c</span> <span class="st">"</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="st">  DESCRIBE SELECT *</span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM '~/dev/SynPUFsDuckDB/data/dispensing-snappy.parquet';"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <table class="table table-sm table-striped small">
@@ -462,11 +467,12 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 </tr>
 </tbody>
 </table>
+<p>real 0m0.016s user 0m0.012s sys 0m0.002s</p>
 </div>
 </div>
 <div id="tabset-1-4" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-4-tab">
 <div class="cell" data-tbl-label="tbl-describe-enc" data-tbl-caption="Description of the Encounter Table">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">/opt/homebrew/bin/duckdb</span> duckdb.duckdb <span class="at">-markdown</span> <span class="at">-c</span> <span class="st">"</span></span>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="bu">time</span> /opt/homebrew/bin/duckdb duckdb.duckdb <span class="at">-markdown</span> <span class="at">-c</span> <span class="st">"</span></span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="st">  DESCRIBE SELECT *</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM '~/dev/SynPUFsDuckDB/data/encounter-snappy.parquet';"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <table class="table table-sm table-striped small">
@@ -569,6 +575,7 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 </tr>
 </tbody>
 </table>
+<p>real 0m0.019s user 0m0.016s sys 0m0.002s</p>
 </div>
 </div>
 <div id="tabset-1-5" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-5-tab">
@@ -668,7 +675,7 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 </tr>
 </tbody>
 </table>
-<p>real 0m0.041s user 0m0.033s sys 0m0.004s</p>
+<p>real 0m0.040s user 0m0.034s sys 0m0.004s</p>
 </div>
 </div>
 <div id="tabset-1-6" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-6-tab">
@@ -752,7 +759,7 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 </tr>
 </tbody>
 </table>
-<p>real 0m0.025s user 0m0.021s sys 0m0.003s</p>
+<p>real 0m0.026s user 0m0.021s sys 0m0.003s</p>
 </div>
 </div>
 <div id="tabset-1-7" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-7-tab">
@@ -848,7 +855,7 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 </tr>
 </tbody>
 </table>
-<p>real 0m0.011s user 0m0.007s sys 0m0.002s</p>
+<p>real 0m0.010s user 0m0.007s sys 0m0.002s</p>
 </div>
 </div>
 <div id="tabset-1-9" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-9-tab">
@@ -892,13 +899,13 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 </tr>
 </tbody>
 </table>
-<p>real 0m0.010s user 0m0.007s sys 0m0.002s</p>
+<p>real 0m0.011s user 0m0.007s sys 0m0.002s</p>
 </div>
 </div>
 </div>
 </div>
-<p>As R doesn’t natively have a 8-byte (64-bit) numeric type, it coerced any column that was an integer larger than 8-bytes to a double. I didn’t want to take the chance of out of memory errors to work with these as a dataframe, so I used DuckDB to alter the type. <code>UBIGINT</code> is DuckDB’s unsigned 8-byte integer type.</p>
-<p>Let’s count grab the number of records in each parquet file:</p>
+<p>On initial challenge: as R doesn’t natively have a 8-byte (64-bit) numeric type, it coerced any column that was an integer larger than 8-bytes to a double. I didn’t want to take the chance of out of memory errors to work with these as a dataframe, so I used DuckDB to alter the type. <code>UBIGINT</code> is DuckDB’s unsigned 8-byte integer type.</p>
+<p>Let’s count grab the number of records in each parquet file and unioning them together:</p>
 <div class="cell" data-tbl-label="tbl-dx-count" data-tbl-caption="Count of Records, Diagnosis Table">
 <div class="sourceCode cell-code" id="cb11"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="bu">time</span> /opt/homebrew/bin/duckdb duckdb.duckdb <span class="at">-markdown</span> <span class="at">-c</span> <span class="st">"</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT format('Enrollment') as Table</span></span>
@@ -948,14 +955,6 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 <td style="text-align: right;">98152</td>
 </tr>
 <tr class="even">
-<td>Enrollment</td>
-<td style="text-align: right;">3668891</td>
-</tr>
-<tr class="odd">
-<td>Procedure</td>
-<td style="text-align: right;">222919598</td>
-</tr>
-<tr class="even">
 <td>Demographic</td>
 <td style="text-align: right;">2224739</td>
 </tr>
@@ -976,12 +975,20 @@ Listing&nbsp;1: R code for extracting SAS datasets and converting to parquet
 <td style="text-align: right;">111085327</td>
 </tr>
 <tr class="odd">
+<td>Enrollment</td>
+<td style="text-align: right;">3668891</td>
+</tr>
+<tr class="even">
 <td>Diagnosis</td>
 <td style="text-align: right;">352441529</td>
 </tr>
+<tr class="odd">
+<td>Procedure</td>
+<td style="text-align: right;">222919598</td>
+</tr>
 </tbody>
 </table>
-<p>real 0m0.127s user 0m0.185s sys 0m0.023s</p>
+<p>real 0m0.129s user 0m0.185s sys 0m0.025s</p>
 </div>
 </section><section id="querying-the-data" class="level2"><h2 class="anchored" data-anchor-id="querying-the-data">Querying the Data</h2>
 <p>As I explored DuckDB, I ran a number of different SQL queries—some of which had practical purposes, others which were essentially cursed—as I attempted to put the tool through its passes. I was consistently impressed by the speed at which it returned answers. I decided to start with a relatively simple query of some practical use. <a href="#lst-dem-l3-agecat-catvars-sas" class="quarto-xref">Listing&nbsp;2</a> illustrates SAS code which does the following:</p>
@@ -1114,9 +1121,9 @@ Listing&nbsp;3: Calulate age cohorts and aggregate the demographic table by age 
 </div>
 <div class="cell-output cell-output-stdout">
 <pre><code>
-real    0m0.057s
-user    0m0.276s
-sys 0m0.011s</code></pre>
+real    0m0.059s
+user    0m0.283s
+sys 0m0.012s</code></pre>
 </div>
 </div>
 <p>As you can see, this results in a runtime that is two orders of magnitude faster than SAS.</p>
@@ -1205,9 +1212,9 @@ Listing&nbsp;4: Runtime for a query that tries to join the diagnosis table to th
 </div>
 <div class="cell-output cell-output-stdout">
 <pre><code>
-real    0m11.570s
-user    0m50.592s
-sys 0m9.582s</code></pre>
+real    0m12.780s
+user    0m50.538s
+sys 0m12.321s</code></pre>
 </div>
 </div>
 <p>Each time I run this query, it takes between 35 and 50 seconds. I gave up on SAS after about 45 minutes.</p>
@@ -1299,7 +1306,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
   });
     var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
     var mailtoRegex = new RegExp(/^mailto:/);
-      var filterRegex = new RegExp('/' + window.location.host + '/');
+      var filterRegex = new RegExp("https:\/\/musings\.mountainherder\.xyz");
     var isInternal = (href) => {
         return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
     }
@@ -1631,4 +1638,4 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 
 
 
-</body></html>
+<footer class="footer"><div class="nav-footer"><div class="nav-footer-center"><div class="toc-actions"><ul><li><a href="https://github.com/scarnecchia/musings/issues" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li><li><a href="https://github.com/scarnecchia/musings/blob/main/_site/posts/2024-04-03_duckdb-r-sentinel-data/index.qmd" class="toc-action"><i class="bi empty"></i>View source</a></li></ul></div></div></div></footer></body></html>
