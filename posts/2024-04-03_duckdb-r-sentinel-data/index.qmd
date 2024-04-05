@@ -11,9 +11,9 @@ citation: true
 
 At work, we primarily work in SAS. This due to SAS as being a validated language and because of the large size of the data we work with. That said, this is 2024---SAS licenses are extremely expensive and the language is not nearly as flexible as open source offerings.
 
-I generally prefer working in R, but one of the biggest challanges I've faced in using R at work is the fact that while SAS is able to handle data sets that are larger than memory by using a combination of fast disk I/O and memory management, R---like Python, natively prefers to manipulate datasets in memory. This is challenging when the datasets can be 100s of gigabytes in in question.
+I generally prefer working in R, but one of the biggest challenges I've faced in using R at work is the fact that while SAS is able to handle data sets that are larger than memory by using a combination of fast disk I/O and memory management, R---like Python, natively prefers to manipulate data sets in memory. This is challenging when the datasets can be 100s of gigabytes in in question.
 
-I've recently heard a lot of good things about [DuckDB](https://duckdb.org) and been reading through [\@hrbrmstr's](https://bsky.app/profile/hrbrmstr.dev) [Cooking with DuckDB](https://duckdb.hrbrmstr.app/). DuckDB is a relational database system designed for Online analytical processing (OLAP) workloads. It can be compiled with no external dependencies---incredibly useful for embedded applications---and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the [Sentinel Common Data Model](https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model) (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages[^1].
+I've recently heard a lot of good things about [DuckDB](https://duckdb.org) and been reading through [\@hrbrmstr's](https://bsky.app/profile/hrbrmstr.dev) [Cooking with DuckDB](https://duckdb.hrbrmstr.app/). DuckDB is a relational database system designed for Online analytic processing (OLAP) workloads. It can be compiled with no external dependencies---incredibly useful for embedded applications---and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the [Sentinel Common Data Model](https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model) (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages[^1].
 
 [^1]: I am aware of arrow and pola.rs and I will eventually benchmark these versus DuckDB.
 
@@ -260,6 +260,8 @@ time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   ;"
 ```
 
+As this tells you, we're working with tables that have between \~53K to 350+ M records. Hardly large compared to some of the real datasets we might work with, but reasonably sized for benchmarking.
+
 ## Querying the Data
 
 As I explored DuckDB, I ran a number of different SQL queries---some of which had practical purposes, others which were essentially cursed---as I attempted to put the tool through its passes. I was consistently impressed by the speed at which it returned answers. I decided to start with a relatively simple query of some practical use. @lst-dem-l3-agecat-catvars-sas illustrates SAS code which does the following:
@@ -452,14 +454,14 @@ time /opt/homebrew/bin/duckdb duckdb.duckdb -c "
   GROUP BY a.EncounterID, a.PatID;"
 ```
 
-Each time I run this query, it takes between 35 and 50 seconds. I gave up on SAS after about 45 minutes.
-
-### What about R?
-
-There are a number of methods for running a query and returning an R object. They deserve their own post, and so I'll write about these soon.
+We're joining a table with 352,441,529 records to a table with 111,738,882 M records. Each time I run this query on my laptop, it takes seconds. I gave up on SAS after about 45 minutes.
 
 ## Final Thoughts
 
 DuckDB yields amazing performance even on machine without a ton of horsepower and it's ability to quickly query larger than memory datasets will make it much easier to work with larger than memory datasets in languages like R and Python. The fact that it is designed for embedded applications with minimal external dependencies makes it a good candidate for deployment in distributed research networks, and it's use of fairly standard SQL makes migrating to it incredibly easy.
 
 [DuckDB is magic](https://bsky.app/profile/tft.io/post/3koz2b2lsph2o).
+
+### What about R?
+
+There are a number of methods for running a query and returning an R object. They deserve their own post.

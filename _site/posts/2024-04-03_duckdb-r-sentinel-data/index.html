@@ -176,8 +176,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     
 <!-- main -->
 <main class="content quarto-banner-title-block" id="quarto-document-content"><p>At work, we primarily work in SAS. This due to SAS as being a validated language and because of the large size of the data we work with. That said, this is 2024—SAS licenses are extremely expensive and the language is not nearly as flexible as open source offerings.</p>
-<p>I generally prefer working in R, but one of the biggest challanges I’ve faced in using R at work is the fact that while SAS is able to handle data sets that are larger than memory by using a combination of fast disk I/O and memory management, R—like Python, natively prefers to manipulate datasets in memory. This is challenging when the datasets can be 100s of gigabytes in in question.</p>
-<p>I’ve recently heard a lot of good things about <a href="https://duckdb.org">DuckDB</a> and been reading through <a href="https://bsky.app/profile/hrbrmstr.dev">@hrbrmstr’s</a> <a href="https://duckdb.hrbrmstr.app/">Cooking with DuckDB</a>. DuckDB is a relational database system designed for Online analytical processing (OLAP) workloads. It can be compiled with no external dependencies—incredibly useful for embedded applications—and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the <a href="https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model">Sentinel Common Data Model</a> (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages<a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a>.</p>
+<p>I generally prefer working in R, but one of the biggest challenges I’ve faced in using R at work is the fact that while SAS is able to handle data sets that are larger than memory by using a combination of fast disk I/O and memory management, R—like Python, natively prefers to manipulate data sets in memory. This is challenging when the datasets can be 100s of gigabytes in in question.</p>
+<p>I’ve recently heard a lot of good things about <a href="https://duckdb.org">DuckDB</a> and been reading through <a href="https://bsky.app/profile/hrbrmstr.dev">@hrbrmstr’s</a> <a href="https://duckdb.hrbrmstr.app/">Cooking with DuckDB</a>. DuckDB is a relational database system designed for Online analytic processing (OLAP) workloads. It can be compiled with no external dependencies—incredibly useful for embedded applications—and is known for its ability to query large databases very quickly. I decided to give it a try. This post is intended to do some basic benchmarking against data in the <a href="https://www.sentinelinitiative.org/methods-data-tools/sentinel-common-data-model">Sentinel Common Data Model</a> (SCDM). It has R, Python, and Rust APIs, which will make it incredibly useful for querying large datasets from these languages<a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a>.</p>
 <div class="callout callout-style-simple callout-note no-icon">
 <div class="callout-body d-flex">
 <div class="callout-icon-container">
@@ -1000,6 +1000,7 @@ Conventions
 </table>
 <p>real 0m0.129s user 0m0.185s sys 0m0.025s</p>
 </div>
+<p>As this tells you, we’re working with tables that have between ~53K to 350+ M records. Hardly large compared to some of the real datasets we might work with, but reasonably sized for benchmarking.</p>
 </section><section id="querying-the-data" class="level2"><h2 class="anchored" data-anchor-id="querying-the-data">Querying the Data</h2>
 <p>As I explored DuckDB, I ran a number of different SQL queries—some of which had practical purposes, others which were essentially cursed—as I attempted to put the tool through its passes. I was consistently impressed by the speed at which it returned answers. I decided to start with a relatively simple query of some practical use. <a href="#lst-dem-l3-agecat-catvars-sas" class="quarto-xref">Listing&nbsp;2</a> illustrates SAS code which does the following:</p>
 <ol type="1">
@@ -1226,15 +1227,15 @@ user    0m50.538s
 sys 0m12.321s</code></pre>
 </div>
 </div>
-<p>Each time I run this query, it takes between 35 and 50 seconds. I gave up on SAS after about 45 minutes.</p>
-<section id="what-about-r" class="level3"><h3 class="anchored" data-anchor-id="what-about-r">What about R?</h3>
-<p>There are a number of methods for running a query and returning an R object. They deserve their own post, and so I’ll write about these soon.</p>
-</section></section><section id="final-thoughts" class="level2"><h2 class="anchored" data-anchor-id="final-thoughts">Final Thoughts</h2>
+<p>We’re joining a table with 352,441,529 records to a table with 111,738,882 M records. Each time I run this query on my laptop, it takes seconds. I gave up on SAS after about 45 minutes.</p>
+</section><section id="final-thoughts" class="level2"><h2 class="anchored" data-anchor-id="final-thoughts">Final Thoughts</h2>
 <p>DuckDB yields amazing performance even on machine without a ton of horsepower and it’s ability to quickly query larger than memory datasets will make it much easier to work with larger than memory datasets in languages like R and Python. The fact that it is designed for embedded applications with minimal external dependencies makes it a good candidate for deployment in distributed research networks, and it’s use of fairly standard SQL makes migrating to it incredibly easy.</p>
 <p><a href="https://bsky.app/profile/tft.io/post/3koz2b2lsph2o">DuckDB is magic</a>.</p>
+<section id="what-about-r" class="level3"><h3 class="anchored" data-anchor-id="what-about-r">What about R?</h3>
+<p>There are a number of methods for running a query and returning an R object. They deserve their own post.</p>
 
 
-</section><div id="quarto-appendix" class="default"><section id="footnotes" class="footnotes footnotes-end-of-document" role="doc-endnotes"><h2 class="anchored quarto-appendix-heading">Footnotes</h2>
+</section></section><div id="quarto-appendix" class="default"><section id="footnotes" class="footnotes footnotes-end-of-document" role="doc-endnotes"><h2 class="anchored quarto-appendix-heading">Footnotes</h2>
 <ol>
 <li id="fn1"><p>I am aware of arrow and pola.rs and I will eventually benchmark these versus DuckDB.<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
 <li id="fn2"><p>A better solution would have been to use SAS to convert the SynPUF data from the SAS7BDAT format to JSON or CSV, however, I don’t have a SAS license for my personal machine, my work laptop doesn’t have the hard drive space left to hold it, and it VPN and bandwidth constraints would have made it challenging to remove from my work environment.<a href="#fnref2" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
