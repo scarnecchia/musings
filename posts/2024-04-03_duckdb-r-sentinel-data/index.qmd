@@ -21,6 +21,7 @@ All SAS queries were run on a Dell PowerEdge R750 Rack Server dedicated to runni
 #| lst-label: lst-mac-stats
 #| lst-cap: "Results of calls to system_profiler on Mac OS"
 #| echo: false
+#| cache: true
 echo $(system_profiler SPHardwareDataType | grep "  Memory:")
 echo $(system_profiler SPHardwareDataType | grep Chip:)
 echo $(system_profiler SPHardwareDataType | grep Cores:)
@@ -98,6 +99,7 @@ Now that we have that data in a more usable format. Let's look at what we have. 
 #| tbl-label: tbl-describe-enr
 #| tbl-caption: "Description of the Enrollment Table"
 #| output: asis
+#| cache: true
 /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/enrollment-snappy.parquet';"
@@ -109,6 +111,7 @@ Now that we have that data in a more usable format. Let's look at what we have. 
 #| tbl-label: tbl-describe-dem
 #| tbl-caption: "Description of the Demographic Table"
 #| output: asis
+#| cache: true
 /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/demographic-snappy.parquet';"
@@ -120,6 +123,7 @@ Now that we have that data in a more usable format. Let's look at what we have. 
 #| tbl-label: tbl-describe-dis
 #| tbl-caption: "Description of the Dispensing Table"
 #| output: asis
+#| cache: true
 /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/dispensing-snappy.parquet';"
@@ -131,6 +135,7 @@ Now that we have that data in a more usable format. Let's look at what we have. 
 #| tbl-label: tbl-describe-enc
 #| tbl-caption: "Description of the Encounter Table"
 #| output: asis
+#| cache: true
 /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/encounter-snappy.parquet';"
@@ -142,6 +147,7 @@ Now that we have that data in a more usable format. Let's look at what we have. 
 #| tbl-label: tbl-describe-dia
 #| tbl-caption: "Description of the Diagnosis Table"
 #| output: asis
+#| cache: true
 time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/diagnosis-snappy.parquet';"
@@ -153,6 +159,7 @@ time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
 #| tbl-label: tbl-describe-pro
 #| tbl-caption: "Description of the Procedure Table"
 #| output: asis
+#| cache: true
 time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/procedure-snappy.parquet';"
@@ -164,6 +171,7 @@ time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
 #| tbl-label: tbl-describe-dth
 #| tbl-caption: "Description of the Death Table"
 #| output: asis
+#| cache: true
 time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/death-snappy.parquet';"
@@ -175,6 +183,7 @@ time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
 #| tbl-label: tbl-describe-fac
 #| tbl-caption: "Description of the Facility Table"
 #| output: asis
+#| cache: true
 time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/facility-snappy.parquet';"
@@ -186,6 +195,7 @@ time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
 #| tbl-label: tbl-describe-pvd
 #| tbl-caption: "Description of the Provider Table"
 #| output: asis
+#| cache: true
 time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   DESCRIBE SELECT *
   FROM '~/dev/SynPUFsDuckDB/data/provider-snappy.parquet';"
@@ -201,6 +211,7 @@ Let's count grab the number of records in each parquet file:
 #| tbl-label: tbl-dx-count
 #| tbl-caption: "Count of Records, Diagnosis Table"
 #| output: asis
+#| cache: true
 
 time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   SELECT format('Enrollment') as Table
@@ -326,6 +337,7 @@ Now let's run the same query via DuckDB in the command line---note the time belo
 ```{bash}
 #| lst-label: lst-dem-l3-agecat-catvars
 #| lst-cap: "Calulate age cohorts and aggregate the demographic table by age cohort and demographic characteristics."
+#| cache: true
 
 time /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
 CREATE OR REPLACE TEMP TABLE dem_l3_tmp AS
@@ -386,6 +398,7 @@ Now, for the sake of completeness, let's compare the results. We'll see that the
 #| tbl-label: tbl-dem-l3-agecat-catvars-duckdb
 #| echo: false
 #| output: asis
+#| cache: true
 
 /opt/homebrew/bin/duckdb duckdb.duckdb -markdown -c "
   SELECT * FROM dem_l3_agecat;"
@@ -420,6 +433,7 @@ Let's try something a little more cursed. @lst-dx-per-enc-per-pat shows a query 
 #| lst-label: lst-dx-per-enc-per-pat
 #| lst-cap: "Runtime for a query that tries to join the diagnosis table to the encounter table by PatID and EncounterID and counts the number of diagnosis by PatID and EncounterID"
 #| echo: true
+#| cache: true
 
 time /opt/homebrew/bin/duckdb duckdb.duckdb -c "
   CREATE OR REPLACE TEMP TABLE dia_l2_enc_patid AS
